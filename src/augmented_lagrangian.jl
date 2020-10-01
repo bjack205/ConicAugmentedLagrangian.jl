@@ -13,20 +13,30 @@ function Πsoc(x)
     throw(ErrorException("Invalid second-order cone"))
 end
 
+function in_soc(x)
+    v = x[1:end-1]
+    s = x[end]
+    a = norm(v)
+    return a <= s
+end
+
 function dual_update_eq(y, ceq, μ)
     ybar = y + μ * ceq 
     return ybar
 end
 
 function dual_update_soc(z, qx, μ)
-    zbar = z - μ * qx
+    # zbar = [zi - μ * q for (zi,q) in zip(z,qx)]
+    p = length(z)
+    # zbar = [z[i] - μ * qx[i] for i = 1:p]
+    zbar = [Πsoc(z[i] - μ * qx[i]) for i = 1:p]
     return zbar
     # return Πsoc(zbar)
 end
 
-function augmented_lagrangian_AD(x0, f, h, q=x->Float64[];
+function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
         y0 = zero(h(x0)),
-        z0 = zero(q(x0)),
+        z0 = zero.(q(x0)),
         μ = 1.0,
         ϕ = 10.0,
         al_iters=10,
@@ -37,11 +47,14 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Float64[];
 
     n = length(x0)
     m = length(y0)
-    p = length(z0)
+    p = length(z0)  # number of cones
 
     x = copy(x0)  # primals
     y = copy(y0)  # duals on equality constraint h(x)
-    z = copy(z0)  # duals on soc constraint q(x)
+    z = copy(z0)  # duals on soc constraint q(x) (vector of vectors)
+
+    @show typeof(q(x))
+    @show typeof(z)
 
     iters = 0
     for j = 1:al_iters
@@ -49,8 +62,11 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Float64[];
             ceq = h(x)
             L0 = f(x) + y'ceq + 0.5*μ*ceq'ceq
             if p > 0
-                csoc = Πsoc(z - μ*q(x))
-                L0 += 1 / (2μ) * (csoc'csoc - z'z)
+                # csoc = [Πsoc(zi - μ*q) for (zi,q) in zip(z, q(x))]
+                cones = q(x)
+                csoc = [Πsoc(z[i] - μ*cones[i]) for i = 1:p]
+                pen = [csoc[i]'csoc[i] - z[i]'z[i] for i = 1:p]
+                L0 += 1 / (2μ) * sum(pen)
             end
             return L0
         end
@@ -65,8 +81,8 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Float64[];
         y = dual_update_eq(y, ceq, μ)
         if p > 0
             qx = q(x)
-            viol = qx - Πsoc(qx)
-            feas_soc = norm(viol, Inf)
+            viol = [norm(qx[i] - Πsoc(qx[i]),Inf) for i = 1:p]
+            feas_soc = maximum(viol) 
             feas = max(feas, feas_soc) 
             z = dual_update_soc(z, qx, μ)
             @logmsg OuterLoop :feas_soc value=feas_soc
@@ -86,5 +102,5 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Float64[];
             break
         end
     end
-    return x, y
+    return x, y, z
 end
