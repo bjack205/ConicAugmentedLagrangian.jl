@@ -21,8 +21,7 @@ hs50_con(x) = SA[
 ]
 
 x0 = rand(5)
-λ0 = zeros(3)
-x,y = augmented_lagrangian_AD(x0, λ0, hs50_obj, hs50_con, verbose=false)
+x,y = augmented_lagrangian_AD(x0, hs50_obj, hs50_con, verbose=false)
 hs50_obj(x) < 1e-10
 norm(hs50_con(x),Inf) < 1e-10
 
@@ -33,4 +32,32 @@ n = 3D*N
 m = 2D*N
 x0 = rand(n)
 λ0 = zeros(m)
-augmented_lagrangian_AD(x0, λ0, di_obj, di_con)
+x, = augmented_lagrangian_AD(x0, di_obj, di_con)
+
+## socp
+n = 15
+m = 5 
+P = Diagonal(ones(n))
+A = rand(m,n)
+b = rand(m)
+lin_soc_obj(x) = x'P*x
+lin_soc_con(x) = A*x + b
+lin_soc_q(x) = SA[x[1], x[2], x[3], x[4], 0.1]
+
+x0 = rand(n)
+x, = augmented_lagrangian_AD(x0, lin_soc_obj, lin_soc_con, lin_soc_q)
+norm(x[1:4])
+lin_soc_q(x)
+
+## double integrator w/ socp
+D,N = 2,11
+di_obj, di_con = DoubleIntegrator(D,N)
+di_q(x) = SA[x[5], x[6], 7.0]
+n = 3D*N
+m = 2D*N
+x0 = rand(n)
+λ0 = zeros(m)
+x, = augmented_lagrangian_AD(x0, di_obj, di_con, di_q)
+u = reshape(x,:,N)[2D+1:end,:]
+norm.(eachcol(u))[1] - 7  < 1e-8
+
