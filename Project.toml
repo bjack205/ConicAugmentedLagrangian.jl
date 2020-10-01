@@ -1,0 +1,4 @@
+name = "ConicAugmentedLangrangian"
+uuid = "0ec06f31-03c8-42d8-a4a1-ab8a8fbae0c5"
+authors = ["Brian Jackson <bjack205@gmail.com>"]
+version = "0.1.0"
