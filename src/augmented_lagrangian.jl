@@ -28,8 +28,8 @@ end
 function dual_update_soc(z, qx, μ)
     # zbar = [zi - μ * q for (zi,q) in zip(z,qx)]
     p = length(z)
-    # zbar = [z[i] - μ * qx[i] for i = 1:p]
-    zbar = [Πsoc(z[i] - μ * qx[i]) for i = 1:p]
+    zbar = [z[i] - μ * qx[i] for i = 1:p]
+    # zbar = [Πsoc(z[i] - μ * qx[i]) for i = 1:p]
     return zbar
     # return Πsoc(zbar)
 end
@@ -40,10 +40,17 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
         μ = 1.0,
         ϕ = 10.0,
         al_iters=10,
+        ϵ_feas=1e-6,
         kwargs...
     )
     set_logger()
-    SolverLogging.clear_cache!(global_logger().leveldata[OuterLoop])
+    ldata = global_logger().leveldata[OuterLoop]
+    if :verbose ∈ keys(kwargs)
+        ldata.freq = 1
+    else
+        ldata.freq = 10
+    end
+    SolverLogging.clear_cache!(ldata)
 
     n = length(x0)
     m = length(y0)
@@ -52,9 +59,6 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
     x = copy(x0)  # primals
     y = copy(y0)  # duals on equality constraint h(x)
     z = copy(z0)  # duals on soc constraint q(x) (vector of vectors)
-
-    @show typeof(q(x))
-    @show typeof(z)
 
     iters = 0
     for j = 1:al_iters
@@ -98,7 +102,7 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
         @logmsg OuterLoop :μ value=μ
         @logmsg OuterLoop :iter_total value=iters
         print_level(OuterLoop, global_logger())
-        if feas < 1e-6
+        if feas < ϵ_feas 
             break
         end
     end

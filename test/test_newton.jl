@@ -53,12 +53,6 @@ norm(x[1:4])
 ## double integrator w/ socp
 D,N = 2,11
 di_obj, di_con = DoubleIntegrator(D,N)
-di_q(x) = [
-    SA[x[5], x[6], 6.0], 
-    SA[x[11], x[12], 6.0], 
-    SA[x[53], x[54], 6.0], 
-    SA[x[59], x[60], 6.0]
-]
 function di_q(x)
     x_ = reshape(x,:,N)
     us = x_[2D+1:end,:]
@@ -73,3 +67,24 @@ z .- Πsoc.(z)
 u = reshape(x,:,N)[2D+1:end,:]
 unorm = norm.(eachcol(u))
 abs(unorm[1] - 6)  < 1e-6
+
+
+## Rocket Landing Problem
+D = 3
+N = 11
+rocket_obj, rocket_dyn = RocketLanding(N)
+function rocket_q(x)
+    x_ = reshape(x,:,N)
+    us = x_[2D+1:end,:]
+    [[u; 400.0] for u in eachcol(us)]
+end
+
+n = 3D*N
+m = 2D*N
+x0 = rand(n)
+λ0 = zeros(m)
+x,y,z = augmented_lagrangian_AD(x0, rocket_obj, rocket_dyn, rocket_q,
+    ϵ=1e-2, ϵ_feas=1e-6, verbose=true   
+)
+u = reshape(x,:,N)[2D+1:end,:]
+unorm = norm.(eachcol(u))

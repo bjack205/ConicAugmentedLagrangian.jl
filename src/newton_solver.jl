@@ -75,17 +75,18 @@ function newton_solver_AD(f,x0;
 
             # Wolfe conditions
             if (J <= J0 + 1e-4*α*dx'g) && (dx'grad >= 0.9*dx'g)
+                if ρ > 1e-6
+                    @logmsg InnerLoop "Regularization Decreased"
+                    ρ /= 10
+                end
                 break                
             else
                 α /= 2
             end
             if j == ls_iters
                 ρ *= 10
-                @warn "Max Line Search Iterations"
-            else
-                if ρ > 1e-6
-                    ρ /= 10
-                end
+                # @warn "Max Line Search Iterations"
+                @logmsg InnerLoop "Max Line Search Iterations"
             end
         end
         
@@ -96,14 +97,21 @@ function newton_solver_AD(f,x0;
         @logmsg InnerLoop :cost value=f(x) 
         @logmsg InnerLoop :grad value=ngrad 
         @logmsg InnerLoop :α value=α
+        @logmsg InnerLoop :ir_steps value=m
+        @logmsg InnerLoop :ρ value=ρ
         if verbose
             print_level(InnerLoop, global_logger())            
         end
 
         # Convergence check
         if ngrad < ϵ
+            @logmsg OuterLoop "Cost Criteria Met"
             iters = i
             break
+        end
+        if i == newton_iters
+            iters = newton_iters
+            @logmsg OuterLoop "Hit Max Newton Iterations"
         end
     end
     stats = iLQRStats(Jinit, J, ngrad, iters)

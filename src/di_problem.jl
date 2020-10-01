@@ -1,13 +1,19 @@
 
-function DoubleIntegrator(D,N)
+function DoubleIntegrator(D,N;
+        Qd = (@SVector ones(2D)),
+        Rd = (@SVector fill(0.1, D)),
+        Qfd = Qd*N*100,
+        x0 = (@SVector zeros(2D)),
+        xf = [(@SVector fill(1, D)); (@SVector zeros(D))],
+        gravity::Bool=false
+    )
     """
     Objective
     """
     n,m = 2D,D
-    Q = Diagonal(@SVector ones(n))
-    R = Diagonal(@SVector fill(0.1, m))
-    Qf = Diagonal(@SVector ones(n))*N*100
-    xf = [(@SVector fill(1, n ÷ 2)); (@SVector zeros(n ÷ 2))]
+    Q = Diagonal(Qd)
+    R = Diagonal(Rd)
+    Qf = Diagonal(Qfd)
     g = Float64[]
     h = Float64[]
     c = 0.0
@@ -28,9 +34,7 @@ function DoubleIntegrator(D,N)
     """
     Dynamics
     """
-    n,m = 2D,D
     NN = N*(n+m)
-    x0 = zeros(n)
 
     #  Continuous dynamics
     Ac = zeros(n,n)
@@ -59,6 +63,11 @@ function DoubleIntegrator(D,N)
         A[iA,jA] .= Ad
         A[iA,jB] .= Bd
         A[iA,jA2] .= -I(n)
+        if gravity
+            b[iA[D]] = -9.81
+        end
+
+        # Advance inds
         iA = iA .+ n
         jA = jA .+ (n+m)
         jB = jB .+ (n+m)
@@ -67,4 +76,16 @@ function DoubleIntegrator(D,N)
     di_obj(x) = 0.5*x'H*x + g'x + c
     di_dyn(x) = A*x + b
     return di_obj, di_dyn
+end
+
+function RocketLanding(N)
+    n,m = 6,3
+    Qd = SA_F64[1,1,1,10,10,10]
+    Rd = @SVector fill(0.1, m) 
+    Qfd = Qd*N*100
+    x0 = SA_F64[1,1,10,0,0,-1]
+    xf = @SVector zeros(n)
+    DoubleIntegrator(3,N; gravity=true,
+        Qd=Qd, Rd=Rd, Qfd=Qfd, x0=x0, xf=xf,
+    )
 end
