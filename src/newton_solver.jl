@@ -1,0 +1,111 @@
+using LinearAlgebra
+using ForwardDiff
+using SolverLogging
+using Logging
+
+function set_logger()
+    if !(global_logger() isa SolverLogger)
+        logger = SolverLogger(InnerLoop)
+        add_level!(logger, InnerLoop, print_color=:green, indent=4)
+        add_level!(logger, OuterLoop, print_color=:blue, indent=0)
+        global_logger(logger)
+    end
+end
+
+struct iLQRStats{T}
+    J0::T        # initial cost
+    J::T         # final cost
+    grad::T      # terminal gradient
+    iters::Int   # iterations
+end
+
+function newton_solver_AD(f,x0; 
+        newton_iters=10, 
+        ls_iters=10, 
+        verbose=false, 
+        ϵ=1e-6,
+        ir_tol=1e-12,
+        ir_iter=5,
+        ir_rate_thresh=1.2,
+        reg_init=1e-6
+    )
+    set_logger()
+    SolverLogging.clear_cache!(global_logger().leveldata[InnerLoop])
+
+    x = copy(x0)
+    xbar = copy(x0)
+
+    Jinit = f(x0)
+    J = Inf
+
+    ρ = reg_init 
+    ngrad = Inf
+    α = 1.0
+    iters = 0
+    for i = 1:newton_iters
+        # Solve for the step direction
+        g = ForwardDiff.gradient(f, x)
+        H = ForwardDiff.hessian(f, x)
+        Hinv = factorize(H + ρ*I)
+        dx = -(Hinv\g)
+
+        # Iterative Refinement
+        r = H*dx + g
+        nr = norm(r,1)
+        cr = Inf
+        m = 0
+        while nr > ir_tol && m < ir_iter && cr > ir_rate_thresh 
+            dx += -(Hinv\r)
+            r = H*dx + g
+            nr_ = norm(r,1)
+            cr = log(nr_) / log(nr)  # convergence rate
+            nr = nr_
+            m += 1
+        end
+
+        # Line Search
+        J0 = f(x)
+        ngrad0 = norm(g,1)
+        α = 1.0
+        for j = 1:ls_iters
+            xbar .= x + α*dx 
+            J = f(xbar)
+            grad = ForwardDiff.gradient(f, xbar)
+            ngrad = norm(grad,1)
+
+            # Wolfe conditions
+            if (J <= J0 + 1e-4*α*dx'g) && (dx'grad >= 0.9*dx'g)
+                break                
+            else
+                α /= 2
+            end
+            if j == ls_iters
+                ρ *= 10
+                @warn "Max Line Search Iterations"
+            else
+                if ρ > 1e-6
+                    ρ /= 10
+                end
+            end
+        end
+        
+        # Accept the step
+        x .= xbar
+
+        @logmsg InnerLoop :iter value=i 
+        @logmsg InnerLoop :cost value=f(x) 
+        @logmsg InnerLoop :grad value=ngrad 
+        @logmsg InnerLoop :α value=α
+        if verbose
+            print_level(InnerLoop, global_logger())            
+        end
+
+        # Convergence check
+        if ngrad < ϵ
+            iters = i
+            break
+        end
+    end
+    stats = iLQRStats(Jinit, J, ngrad, iters)
+    return x, stats
+end
