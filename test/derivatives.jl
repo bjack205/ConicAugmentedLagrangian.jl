@@ -125,3 +125,14 @@ jac_soc(a)'b ≈ 0.5*[
 ]
 
 ForwardDiff.jacobian(x->jac_soc(x)'b, a) ≈ hess_soc(a,b) 
+
+
+# Test norm cone
+x = rand(5) 
+b = rand(5)
+t = norm(x) * 0.8
+cone = NormCone(t)
+projection(cone, x) == x/norm(x)*t
+jacobian(cone, x) ≈ ForwardDiff.jacobian(x->projection(cone,x), x)
+hessian(cone, x, b) ≈ ForwardDiff.jacobian(x->jacobian(cone,x)'b, x)
+hessian(cone, x, b) ≈ ForwardDiff.hessian(x->projection(cone,x)'b, x)

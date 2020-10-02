@@ -1,7 +1,8 @@
 using LinearAlgebra
 using StaticArrays
+include("cones.jl")
 
-struct DoubleIntegrator{n,m,p,T} <: ProblemDef
+struct DoubleIntegrator{n,m,p,T,C} <: ProblemDef
     Q::Diagonal{T,SVector{n,T}}
     R::Diagonal{T,SVector{m,T}}
     Qf::Diagonal{T,SVector{n,T}}
@@ -12,6 +13,7 @@ struct DoubleIntegrator{n,m,p,T} <: ProblemDef
     uinds::Vector{SVector{m,Int}}
     qinds::Vector{SVector{p,Int}}
     s::Vector{T}
+    cones::Vector{C}
     N::Int
 
     grad::Vector{T}
@@ -26,7 +28,8 @@ struct DoubleIntegrator{n,m,p,T} <: ProblemDef
             xf = [(@SVector fill(1, D)); (@SVector zeros(D))],
             gravity::Bool=false,
             qinds = Vector{Int}[],
-            s = ones(length(qinds))
+            s = Float64[],
+            conetype = SecondOrderCone()
         )
         n,m = 2D,D
         NN = 3D*N
@@ -36,9 +39,11 @@ struct DoubleIntegrator{n,m,p,T} <: ProblemDef
         uinds = SVector{m}.([z[1+n:end] for z in eachcol(inds)])
 
         # Cones
+        if qinds == :control
+            qinds = SVector{D}.(z[1+2D:3D] for z in eachcol(LinearIndices(zeros(3D,N))))
+        end
         p = length(qinds)
         ps = length.(qinds)
-        @assert length(s) == p
         if p > 0
             pi = ps[1]
             @assert ps == fill(pi, p)  # ensure they're all the same size of cone
@@ -47,6 +52,16 @@ struct DoubleIntegrator{n,m,p,T} <: ProblemDef
             pi = 0
             qinds = SVector{0,Int}[]
         end
+        if conetype isa NormCone
+            cones = [NormCone(s[i]) for i = 1:p]
+        else
+            cones = [conetype for i = 1:p]
+            if isempty(s)
+                s = ones(p)
+            end
+        end
+        @assert length(s) == p
+
         
         # Pre-allocation
         grad = zeros(NN)
@@ -55,14 +70,16 @@ struct DoubleIntegrator{n,m,p,T} <: ProblemDef
         # Dynamics
         A,b = DI_dynamics(x0, N, gravity)
 
-        new{n,m,pi,T}(Diagonal(Qd), Diagonal(Rd), Diagonal(Qfd), x0, xf, gravity, 
-            xinds, uinds, qinds, s, N, grad, hess, A,b
+        new{n,m,pi,T, eltype(cones)}(
+            Diagonal(Qd), Diagonal(Rd), Diagonal(Qfd), x0, xf, gravity, 
+            xinds, uinds, qinds, s, cones, N, grad, hess, A,b
         )
     end
 end
 num_vars(prob::DoubleIntegrator) = length(prob.grad)
 num_cons(prob::DoubleIntegrator) = length(prob.b)
 num_cones(prob::DoubleIntegrator) = length(prob.qinds) 
+get_cones(prob::DoubleIntegrator) = prob.cones
 
 
 function cost(prob::DoubleIntegrator, x)
@@ -106,7 +123,13 @@ hess_obj(prob::DoubleIntegrator, x) = hess_obj!(prob, prob.hess, x)
 con_eq(prob::DoubleIntegrator, x) = prob.A*x + prob.b
 jac_eq(prob::DoubleIntegrator, x) = prob.A
 
-con_soc(prob::DoubleIntegrator, x) = [push(x[qi],si) for (qi,si) in zip(prob.qinds,prob.s)]
+con_soc(prob::DoubleIntegrator{<:Any,<:Any,<:Any,<:Any,SecondOrderCone}, x) = 
+    [push(x[qi],si) for (qi,si) in zip(prob.qinds,prob.s)]
+
+con_soc(prob::DoubleIntegrator{<:Any,<:Any,<:Any,<:Any,<:NormCone}, x) = 
+    [x[qi] for qi in prob.qinds]
+
+con_soc(prob::DoubleIntegrator, x) = [[x[qi] .- 5; -5 .- x[qi]] for qi in prob.qinds]
 
 function DoubleIntegratorFuns(D,N; kwargs...)
     prob = DoubleIntegrator(D,N; kwargs...)
@@ -191,7 +214,7 @@ function DI_dynamics(x0, N, gravity::Bool=false)
     return A,b
 end
 
-function RocketLanding(N)
+function RocketLanding(N; kwargs...)
     n,m = 6,3
     Qd = SA_F64[1,1,1,10,10,10]
     Rd = @SVector fill(0.1, m) 
@@ -200,5 +223,6 @@ function RocketLanding(N)
     xf = @SVector zeros(n)
     DoubleIntegrator(3,N; gravity=true,
         Qd=Qd, Rd=Rd, Qfd=Qfd, x0=x0, xf=xf,
+        kwargs...
     )
 end

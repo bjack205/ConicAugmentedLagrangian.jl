@@ -120,6 +120,5 @@ function newton_solver(prob::ProblemDef, x0;
         end
     end
     stats = iLQRStats(Jinit, J, ngrad, iters)
-    println("Used ProblemDef")
     return x, stats
 end
