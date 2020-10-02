@@ -19,7 +19,12 @@ struct iLQRStats{T}
     iters::Int   # iterations
 end
 
-function newton_solver_AD(f,x0; 
+function newton_solver_AD(f,x0; kwargs...)
+    h(x) = zeros(0)
+    prob = ADProblem(length(x0), f) 
+    newton_solver(prob, x0; kwargs...)
+end
+function newton_solver(prob::ProblemDef, x0; 
         newton_iters=10, 
         ls_iters=10, 
         verbose=false, 
@@ -35,7 +40,7 @@ function newton_solver_AD(f,x0;
     x = copy(x0)
     xbar = copy(x0)
 
-    Jinit = f(x0)
+    Jinit = cost(prob, x0)
     J = Inf
 
     ρ = reg_init 
@@ -44,8 +49,8 @@ function newton_solver_AD(f,x0;
     iters = 0
     for i = 1:newton_iters
         # Solve for the step direction
-        g = ForwardDiff.gradient(f, x)
-        H = ForwardDiff.hessian(f, x)
+        g = grad_obj(prob, x)
+        H = hess_obj(prob, x)
         Hinv = factorize(H + ρ*I)
         dx = -(Hinv\g)
 
@@ -64,13 +69,13 @@ function newton_solver_AD(f,x0;
         end
 
         # Line Search
-        J0 = f(x)
+        J0 = cost(prob, x)
         ngrad0 = norm(g,1)
         α = 1.0
         for j = 1:ls_iters
             xbar .= x + α*dx 
-            J = f(xbar)
-            grad = ForwardDiff.gradient(f, xbar)
+            J = cost(prob, xbar)
+            grad = grad_obj(prob, xbar)
             ngrad = norm(grad,1)
 
             # Wolfe conditions
@@ -94,7 +99,7 @@ function newton_solver_AD(f,x0;
         x .= xbar
 
         @logmsg InnerLoop :iter value=i 
-        @logmsg InnerLoop :cost value=f(x) 
+        @logmsg InnerLoop :cost value=cost(prob, x)
         @logmsg InnerLoop :grad value=ngrad 
         @logmsg InnerLoop :α value=α
         @logmsg InnerLoop :ir_steps value=m
@@ -115,5 +120,6 @@ function newton_solver_AD(f,x0;
         end
     end
     stats = iLQRStats(Jinit, J, ngrad, iters)
+    println("Used ProblemDef")
     return x, stats
 end

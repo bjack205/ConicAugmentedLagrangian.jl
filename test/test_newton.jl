@@ -1,6 +1,5 @@
 using StaticArrays
 
-include("../src/newton_solver.jl")
 include("../src/augmented_lagrangian.jl")
 include("../src/di_problem.jl")
 

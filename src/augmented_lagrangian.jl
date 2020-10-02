@@ -34,9 +34,13 @@ function dual_update_soc(z, qx, μ)
     # return Πsoc(zbar)
 end
 
-function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
-        y0 = zero(h(x0)),
-        z0 = zero.(q(x0)),
+function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[]; kwargs...)
+    prob = ADProblem(length(x0), f, h, q)
+    augmented_lagrangian(prob, x0; kwargs...)
+end
+function augmented_lagrangian(prob::ProblemDef, x0;
+        y0 = zeros(num_cons(prob)),
+        z0 = zero.(con_soc(prob, x0)),
         μ = 1.0,
         ϕ = 10.0,
         al_iters=10,
@@ -63,11 +67,11 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
     iters = 0
     for j = 1:al_iters
         function L(x)
-            ceq = h(x)
-            L0 = f(x) + y'ceq + 0.5*μ*ceq'ceq
+            ceq = con_eq(prob,x)
+            L0 = cost(prob, x) + y'ceq + 0.5*μ*ceq'ceq
             if p > 0
                 # csoc = [Πsoc(zi - μ*q) for (zi,q) in zip(z, q(x))]
-                cones = q(x)
+                cones = con_soc(prob, x)
                 csoc = [Πsoc(z[i] - μ*cones[i]) for i = 1:p]
                 pen = [csoc[i]'csoc[i] - z[i]'z[i] for i = 1:p]
                 L0 += 1 / (2μ) * sum(pen)
@@ -78,13 +82,13 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
         iters += stats.iters
 
         # Update constraints
-        ceq = h(x)
+        ceq = con_eq(prob, x)
         feas = norm(ceq, Inf)
 
         # Dual update
         y = dual_update_eq(y, ceq, μ)
         if p > 0
-            qx = q(x)
+            qx = con_soc(prob, x)
             viol = [norm(qx[i] - Πsoc(qx[i]),Inf) for i = 1:p]
             feas_soc = maximum(viol) 
             feas = max(feas, feas_soc) 
@@ -96,7 +100,7 @@ function augmented_lagrangian_AD(x0, f, h, q=x->Vector{Float64}[];
         μ *= ϕ
 
         @logmsg OuterLoop :iter value=j
-        @logmsg OuterLoop :cost value=f(x)
+        @logmsg OuterLoop :cost value=cost(prob,x)
         @logmsg OuterLoop :cost_AL value=L(x)
         @logmsg OuterLoop :feas value=feas
         @logmsg OuterLoop :μ value=μ
