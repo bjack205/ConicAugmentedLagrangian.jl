@@ -40,7 +40,7 @@ function newton_solver(prob::ProblemDef, x0;
     x = copy(x0)
     xbar = copy(x0)
 
-    Jinit = cost(prob, x0)
+    Jinit = obj(prob, x0)
     J = Inf
 
     ρ = reg_init 
@@ -69,12 +69,12 @@ function newton_solver(prob::ProblemDef, x0;
         end
 
         # Line Search
-        J0 = cost(prob, x)
+        J0 = obj(prob, x)
         ngrad0 = norm(g,1)
         α = 1.0
         for j = 1:ls_iters
             xbar .= x + α*dx 
-            J = cost(prob, xbar)
+            J = obj(prob, xbar)
             grad = grad_obj(prob, xbar)
             ngrad = norm(grad,1)
 
@@ -99,7 +99,7 @@ function newton_solver(prob::ProblemDef, x0;
         x .= xbar
 
         @logmsg InnerLoop :iter value=i 
-        @logmsg InnerLoop :cost value=cost(prob, x)
+        @logmsg InnerLoop :cost value=obj(prob, x)
         @logmsg InnerLoop :grad value=ngrad 
         @logmsg InnerLoop :α value=α
         @logmsg InnerLoop :ir_steps value=m

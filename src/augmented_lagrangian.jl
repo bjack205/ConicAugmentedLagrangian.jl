@@ -53,7 +53,7 @@ function augmented_lagrangian(prob::ProblemDef, x0;
     for j = 1:al_iters
         function L(x)
             ceq = con_eq(prob,x)
-            L0 = cost(prob, x) + y'ceq + 0.5*μ*ceq'ceq
+            L0 = obj(prob, x) + y'ceq + 0.5*μ*ceq'ceq
             if p > 0
                 # csoc = [Πsoc(zi - μ*q) for (zi,q) in zip(z, q(x))]
                 cones = con_soc(prob, x)
@@ -87,7 +87,7 @@ function augmented_lagrangian(prob::ProblemDef, x0;
         μ *= ϕ
 
         @logmsg OuterLoop :iter value=j
-        @logmsg OuterLoop :cost value=cost(prob,x)
+        @logmsg OuterLoop :cost value=obj(prob,x)
         @logmsg OuterLoop :cost_AL value=L(x)
         @logmsg OuterLoop :feas value=feas
         @logmsg OuterLoop :μ value=μ

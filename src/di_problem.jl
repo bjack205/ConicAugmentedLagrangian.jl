@@ -82,7 +82,7 @@ num_cones(prob::DoubleIntegrator) = length(prob.qinds)
 get_cones(prob::DoubleIntegrator) = prob.cones
 
 
-function cost(prob::DoubleIntegrator, x)
+function obj(prob::DoubleIntegrator, x)
     J = zero(eltype(x))
     xf = prob.xf
     R = prob.R
@@ -141,6 +141,19 @@ function DoubleIntegratorFuns(D,N; kwargs...)
     Q,R,Qf = prob.Q, prob.R, prob.Qf 
     x0,xf = prob.x0, prob.xf
     gravity = prob.gravity
+    H,g,c = DI_objective(Q,R,Qf,xf)
+
+    """
+    Dynamics
+    """
+    A,b = DI_dynamics(x0, N, gravity)
+
+    di_obj(x) = 0.5*x'H*x + g'x + c
+    di_dyn(x) = A*x + b
+    return di_obj, di_dyn
+end
+
+function DI_objective(Q,R,Qf,xf)
     g = Float64[]
     h = Float64[]
     c = 0.0
@@ -157,16 +170,9 @@ function DoubleIntegratorFuns(D,N; kwargs...)
     append!(h, R.diag)
     c += 0.5*xf'Qf*xf
     H = Diagonal(h)
-
-    """
-    Dynamics
-    """
-    A,b = DI_dynamics(x0, N, gravity)
-
-    di_obj(x) = 0.5*x'H*x + g'x + c
-    di_dyn(x) = A*x + b
-    return di_obj, di_dyn
+    return H,g,c
 end
+
 
 function DI_dynamics(x0, N, gravity::Bool=false)
     n = length(x0)
@@ -213,6 +219,13 @@ function DI_dynamics(x0, N, gravity::Bool=false)
     end
     return A,b
 end
+
+function DI_cones(::Val{D},N) where D
+    uinds = SVector{D}(1:D) .+ 2D
+    qinds = [uinds .+ (k-1)*3D for k = 1:N]
+end
+DI_cones(D,N) = DI_cones(Val(D),N)  # WARNING: type unstable
+
 
 function RocketLanding(N; kwargs...)
     n,m = 6,3

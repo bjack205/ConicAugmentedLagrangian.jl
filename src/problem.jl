@@ -7,7 +7,7 @@ num_vars(::ProblemDef) = throw(ErrorException("Not implemented"))
 num_cons(::ProblemDef) = throw(ErrorException("Not implemented"))
 num_cones(::ProblemDef) = throw(ErrorException("Not implemented"))
 get_cones(::ProblemDef) = throw(ErrorException("Not implemented"))
-cost(::ProblemDef, x) = throw(ErrorException("Not implemented"))
+obj(::ProblemDef, x) = throw(ErrorException("Not implemented"))
 con_eq!(::ProblemDef, ceq, x) = throw(ErrorException("Not implemented"))
 con_soc!(::ProblemDef, cones, x) = throw(ErrorException("Not implemented"))
 
@@ -27,7 +27,7 @@ function grad_obj(prob::ProblemDef, x)
 end
 
 function grad_obj!(prob::ProblemDef, grad, x)
-    f(x) = cost(prob, x)
+    f(x) = obj(prob, x)
     ForwardDiff.gradient!(grad, f, x)
 end
 
@@ -42,7 +42,7 @@ function hess_obj(prob::ProblemDef, x)
 end
 
 function hess_obj!(prob::ProblemDef, H, x)
-    f(x) = cost(prob, x)
+    f(x) = obj(prob, x)
     ForwardDiff.hessian!(H, f, x)
 end
 
@@ -87,7 +87,7 @@ num_vars(prob::ADProblem) = prob.n
 num_cons(prob::ADProblem) = prob.m
 num_cones(prob::ADProblem) = prob.p 
 get_cones(prob::ADProblem) = [SecondOrderCone() for i = 1:prob.p]
-cost(prob::ADProblem, x) = prob.f(x)
+obj(prob::ADProblem, x) = prob.f(x)
 con_eq(prob::ADProblem, x) = prob.h(x)
 con_soc(prob::ADProblem, x) = prob.q(x)
 
@@ -100,12 +100,12 @@ mutable struct ALProblem{P,T} <: ProblemDef
     μ::T
 end
 
-function cost(alprob::ALProblem, x)
+function obj(alprob::ALProblem, x)
     y,z = alprob.y, alprob.z
     μ = alprob.μ
     prob = alprob.prob
     ceq = con_eq(prob,x)
-    L0 = cost(prob, x) + y'ceq + 0.5*μ*ceq'ceq
+    L0 = obj(prob, x) + y'ceq + 0.5*μ*ceq'ceq
 
     p = num_cones(prob)
     conevals = con_soc(prob, x)
